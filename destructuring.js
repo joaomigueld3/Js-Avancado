@@ -15,7 +15,7 @@ const person_2 = {
   name: "jose",
   lastName: "santos",
 };
-console.log(person_2)
+console.log({person_2})
 
 function getUsers([
   {

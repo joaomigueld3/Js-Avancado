@@ -62,9 +62,9 @@ const nameAndHeight = characters.map((element) =>({
     name: element.name, 
     height: element.height
 }))
-console.log(nameAndHeight)
+console.log({nameAndHeight})
 const firstNames = characters.map((element) => element.name.split(" ")[0])
-console.log(firstNames)
+console.log({firstNames})
 /*
 REDUCE
 Get the total mass of all characters
@@ -92,19 +92,102 @@ console.log({charByEyeColor})
 const totalNameChar = characters.reduce((acc, curr) => acc + curr.name.length ,0)
 console.log({totalNameChar})
 /*
+SOME
+Is there at least one male character?
+Is there at least one character with blue eyes?
+Is there at least one character taller than 210?
+Is there at least one character that has mass less than 50?
+*/
+console.log('SOME')
+const atLeastMaleChar = characters.some((element) => {
+    return element.gender === 'male'
+})
+console.log(atLeastMaleChar)
+const atLeastBlue = characters.some((element) => element.eye_color === 'blue')
+console.log(atLeastBlue)
+const taller200 = characters.some((element) => element.height > 210)
+console.log(taller200)
+const massLess50  = characters.some((element) => element.mass < 50)
+console.log(massLess50)
+/*
 SORT
 Sort by name
 Sort by mass
 Sort by height
 Sort by gender
+*/
+console.log('SORT')
+const byMass = characters.sort((a,b) =>{
+    return a.mass - b.mass
+})
+console.log({byMass})
+const byHeight = characters.sort((a,b) => a.height - b.height)
+console.log({byHeight})
+const byName = characters.sort((a,b) =>{
+    if (a.name < b.name){
+        return -1
+    }else{
+        return 1
+    }
+})
+console.log({byName})
+const byGender = characters.sort((a,b) => {
+    if(a.gender==='female') return -1
+    return 1
+})
+console.log({byGender})
+/*
 EVERY
 Does every character have blue eyes?
 Does every character have mass more than 40?
 Is every character shorter than 200?
 Is every character male?
-SOME
-Is there at least one male character?
-Is there at least one character with blue eyes?
-Is there at least one character taller than 200?
-Is there at least one character that has mass less than 50?
 */
+console.log('EVERY')
+const everyBlueEyes = characters.every((element) => element.eye_color === 'blue')
+console.log({everyBlueEyes})
+const everyMassGreater40 = characters.every((element) => element.mass > 40)
+console.log({everyMassGreater40})
+const everyShorter200 = characters.every((element) => element.height < 200)
+const everyBool = !everyShorter200 ? characters.map((element) =>{
+    if (element.height >200){
+        let obj = {
+            name: element.name,
+            height: element.height
+        }
+        return obj
+    } else return 'ok' }) : 'all characters are shorther than 200'
+console.log({everyShorter200},{everyBool})
+
+const everyCharMale = characters.every((element) => {
+   return element.gender === 'male'
+})
+console.log({everyCharMale})
+
+const charactersWithSkills = characters.map((item) =>{
+    if (item.name.split(' ')[0] === 'Luke'){
+        return{
+            ...item,
+            skills: 'green lightsaber, force, chosen one'
+        }
+    }
+    else if (item.name.split(' ')[0] === 'Leia'){
+        return{
+            ...item,
+            skills: 'hidden force, chosen one, charming'
+        }
+    }
+    else if (item.name.split(' ')[0] === 'Darth'){
+        return{
+            ...item,
+            skills: 'red lightsaber, insane force (with choking), dark side'
+        }
+    }
+    else if (item.name.split(' ')[0] === 'Anakin'){
+        return{
+            ...item,
+            skills: 'blue lightsaber, force, anger and ambition'
+        }
+    }
+})
+console.log({charactersWithSkills})
