@@ -38,3 +38,12 @@ console.log(colors); // ['jose', 'jose', 'jose']
     numbers.sort((a, b) => (b-a));//descending
     console.log(numbers)
 
+// write a function to print from 1 to 100 without loops
+function printZerontoToHundred (number) {
+    if(number === 101) 
+        return 0;
+    else
+        console.log(number);
+        return printZerontoToHundred(number+1);
+}
+printZerontoToHundred(1)
