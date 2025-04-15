@@ -1,0 +1,33 @@
+// bala penetrando uma parede de concreto ou carros colidindo
+// inteligencia de enxames PSO
+/*
+The simulation should be visually interesting and informative.
+
+It needs to look and behave right.
+
+Try to add unique objects for Newtonian collision problems instead of plain geometric shapes.
+
+Add color gradients, nice color palettes, lighting sources, shadows, interaction effects, background details, etc.
+
+Add animated plots or real time data displays to better show the physics.
+*/
+
+Prompt: Create a 2D physics simulation involving a 9mm bullet that penetrates a 10cm concrete wall. Let me interact by changing the bullet's velocity and the wall thickness.
+
+Create a 2D JavaScript physics simulation using matter.js involving a 9mm bullet that penetrates a 30cm concrete wall. Give me a minigame where i can interact by changing the bullet's velocity and the wall thickness. 
+
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+
+  Create a 2D JavaScript physics simulation using matter.js involving a 9mm bullet that penetrates a 30cm concrete wall. Give me a minigame where i can interact by changing the bullet's velocity and the wall thickness.
+All code for this project should use matter.js, and be contained in a single HTML file using ES modules via import maps.
+
+Create a 2D JavaScript physics simulation using matter.js involving a 9mm bullet that penetrates a 30cm concrete wall. Consider the distance between both objects of 10 meters, and for any other constants use a standard value. Use the Energy-based Model. 
+Simulate the penetration by making the bullet go in/through the wall without visually destroying it;
+Give me a minigame where i can interact by changing the bullet's velocity and the wall thickness. 
+All code for this project should use matter.js, and be contained in a single HTML file using ES modules via import maps.
+
+Create a 2D JavaScript physics simulation involving a 9mm bullet that penetrates a 30cm concrete wall. Make the simulation obey the physics principles. Consider the distance between both objects of 10 meters, and for any other constants use a standard value. Use the Energy-based Model. 
+Simulate the penetration by making the bullet go inside/through the wall without visually destroying it;
+Give me a minigame where i can interact by changing the bullet's velocity and the wall thickness. 
+All code for this project should use matter.js or p5.js, and be contained in a single HTML file using ES modules via import maps.
+

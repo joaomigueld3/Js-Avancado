@@ -1,0 +1,10 @@
+Create a 2D JavaScript physics simulation like a game with 3 billiard balls (white, black, blue), moving in a billiard table. 
+Make the simulation obey the physics principles. The initial position should be random, the variables the player can control are position (x,y) and acceleration. Only one user will play.
+All code for this project should use matter.js, and be contained in a single HTML file using ES modules via import maps.
+
+Create a 2D JavaScript physics simulation like a game of billiard with balls (white, black, blue). 
+Make the simulation obey the physics principles, the only variables should be position (x,y) and force, for any other constants use a standard value. The initial position of the balls should be random, the player should be able to hit the ball with the mouse giving directions and force. Should be single player.
+All code for this project should use matter.js, and be contained in a single HTML file using ES modules via import maps.
+
+
+engine.gravity = { x: 0, y: 0, scale: 0 };

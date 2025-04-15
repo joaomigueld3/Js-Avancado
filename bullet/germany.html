@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matter.js Bullet Penetration Simulation</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #simulation-container {
+            margin-top: 20px;
+            border: 1px solid black;
+            background-color: #ffffff; /* White background for canvas */
+        }
+        #controls {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            background-color: #e9e9e9;
+            border-radius: 5px;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px 15px;
+            align-items: center;
+        }
+        label {
+            font-weight: bold;
+            text-align: right;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            grid-column: 1 / -1; /* Span all columns */
+            padding: 10px 15px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        .value-display {
+            min-width: 60px;
+            text-align: left;
+            font-family: monospace;
+        }
+    </style>
+
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+
+</head>
+<body>
+
+    <h1>Bullet Penetration Simulation</h1>
+
+    <div id="controls">
+        <label for="velocitySlider">Bullet Velocity:</label>
+        <input type="range" id="velocitySlider" min="100" max="1000" value="350" step="10">
+        <span id="velocityValue" class="value-display">350 m/s</span>
+
+        <label for="thicknessSlider">Wall Thickness:</label>
+        <input type="range" id="thicknessSlider" min="5" max="100" value="30" step="1">
+        <span id="thicknessValue" class="value-display">30 cm</span>
+
+        <button id="resetButton">Fire Bullet / Reset Simulation</button>
+    </div>
+
+    <div id="simulation-container"></div>
+    <div id="penetrationResult" style="margin-top: 10px; font-weight: bold;">Status: Ready</div>
+
+    <script type="module">
+
+        // --- Simulation Constants ---
+        const canvasWidth = 1000; // pixels
+        const canvasHeight = 400; // pixels
+        const pixelsPerMeter = 40; // Scale: 40 pixels = 1 meter
+        const initialDistanceMeters = 10; // meters
+
+        // --- Physics Constants (SI Units) ---
+        const bulletMassKg = 0.008; // Mass of a 9mm bullet (approx 8 grams)
+        // VERY simplified resistance factor for "concrete" (Joules required to penetrate 1 meter)
+        // Needs tuning for plausible results! Higher means harder to penetrate.
+        const concreteResistanceFactor = 60000; // J/m
+
+        // --- Matter.js Modules ---
+        const Engine = Matter.Engine;
+        const Render = Matter.Render;
+        const Runner = Matter.Runner;
+        const Bodies = Matter.Bodies;
+        const Body = Matter.Body;
+        const Composite = Matter.Composite;
+        const Events = Matter.Events;
+
+        // --- Simulation Variables ---
+        let engine;
+        let render;
+        let runner;
+        let bullet = null;
+        let wall = null;
+        let currentBulletVelocity = 350; // m/s
+        let currentWallThicknessCm = 30; // cm
+
+        // --- DOM Elements ---
+        const simulationContainer = document.getElementById('simulation-container');
+        const resetButton = document.getElementById('resetButton');
+        const velocitySlider = document.getElementById('velocitySlider');
+        const velocityValue = document.getElementById('velocityValue');
+        const thicknessSlider = document.getElementById('thicknessSlider');
+        const thicknessValue = document.getElementById('thicknessValue');
+        const penetrationResult = document.getElementById('penetrationResult');
+
+        // --- Initialize Simulation ---
+        function setupSimulation() {
+            // Create engine
+            engine = Engine.create();
+            engine.world.gravity.y = 0; // No gravity for horizontal shot
+
+            // Create renderer
+            render = Render.create({
+                element: simulationContainer,
+                engine: engine,
+                options: {
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    wireframes: false, // Show solid shapes
+                    background: '#eeeeee' // Light grey background
+                }
+            });
+
+            // Create runner
+            runner = Runner.create();
+
+            // Run the engine and renderer
+            Render.run(render);
+            Runner.run(runner, engine);
+
+            // Initial setup of objects
+            resetSimulation();
+
+            // Add collision event listener
+            Events.on(engine, 'collisionStart', handleCollision);
+        }
+
+        // --- Reset Objects and Apply Parameters ---
+        function resetSimulation() {
+            // Clear existing dynamic bodies (bullet) and the wall
+            if (bullet) {
+                Composite.remove(engine.world, bullet);
+                bullet = null;
+            }
+            if (wall) {
+                Composite.remove(engine.world, wall);
+                wall = null;
+            }
+
+            // Reset status
+            penetrationResult.textContent = "Status: Ready";
+
+            // Get values from sliders
+            currentBulletVelocity = parseFloat(velocitySlider.value);
+            currentWallThicknessCm = parseFloat(thicknessSlider.value);
+            const wallThicknessMeters = currentWallThicknessCm / 100.0;
+
+            // Update displayed values
+            velocityValue.textContent = `${currentBulletVelocity} m/s`;
+            thicknessValue.textContent = `${currentWallThicknessCm} cm`;
+
+            // Calculate positions based on scale
+            const wallThicknessPixels = wallThicknessMeters * pixelsPerMeter;
+            const wallPositionX = canvasWidth * 0.75; // Position wall 3/4 across canvas
+            const wallPositionY = canvasHeight / 2;
+            const bulletStartX = wallPositionX - (initialDistanceMeters * pixelsPerMeter) - (wallThicknessPixels / 2);
+            const bulletStartY = canvasHeight / 2;
+
+            // Create Wall
+            wall = Bodies.rectangle(
+                wallPositionX,
+                wallPositionY,
+                wallThicknessPixels, // Width (thickness visually)
+                canvasHeight * 0.8, // Height
+                {
+                    isStatic: true,
+                    label: 'wall',
+                    render: { fillStyle: '#888888' }, // Grey color for wall
+                    // Store thickness in meters for calculations
+                    plugin: {
+                        wallData: { thicknessMeters: wallThicknessMeters }
+                    }
+                }
+            );
+
+            // Create Bullet (visually larger than actual 9mm for visibility)
+            const bulletVisualWidth = 15; // pixels
+            const bulletVisualHeight = 5; // pixels
+            bullet = Bodies.rectangle(
+                bulletStartX,
+                bulletStartY,
+                bulletVisualWidth,
+                bulletVisualHeight,
+                {
+                    label: 'bullet',
+                    mass: bulletMassKg,
+                    frictionAir: 0.001, // Minimal air resistance
+                    friction: 0.05,
+                    restitution: 0.1, // Low bounciness
+                    render: { fillStyle: '#333333' }, // Dark color for bullet
+                    plugin: {
+                        bulletData: { hasHitWall: false }
+                    }
+                }
+            );
+
+            // Add wall and bullet to the world
+            Composite.add(engine.world, [wall, bullet]);
+
+            // Apply initial velocity to the bullet (in Matter.js units)
+            // Matter.js velocity is roughly pixels per step (~16.67ms).
+            // We need to convert m/s to this. Let's approximate based on runner speed.
+            // OR simpler: Apply force, but setVelocity is more direct for initial speed.
+            // Let's try setting velocity based on m/s directly - Matter might scale internally?
+            // Test: Set velocity in the intended direction (positive x)
+             Body.setVelocity(bullet, { x: currentBulletVelocity / 5 , y: 0 }); // Dividing by 5 is an empirical adjustment factor to make the pixel/tick velocity somewhat match m/s intent visually. It's not physically precise.
+
+            // Alternative: Apply an initial impulse force
+            // const forceMagnitude = bulletMassKg * currentBulletVelocity / (16.67/1000); // Approximate impulse F = m*v / dt
+            // Body.applyForce(bullet, bullet.position, { x: forceMagnitude * 0.001 , y: 0 }); // Adjust force multiplier as needed
+
+             console.log(`Resetting: Velocity=${currentBulletVelocity} m/s, Thickness=${currentWallThicknessCm} cm (${wallThicknessMeters} m)`);
+             console.log(`Wall position: ${wallPositionX.toFixed(1)}px, Thickness: ${wallThicknessPixels.toFixed(1)}px`);
+             console.log(`Bullet start: ${bulletStartX.toFixed(1)}px, Mass: ${bulletMassKg} kg`);
+             console.log(`Initial bullet velocity set (approx): x=${(currentBulletVelocity / 5).toFixed(2)} pixels/tick`);
+        }
+
+
+        // --- Handle Collisions ---
+        function handleCollision(event) {
+            const pairs = event.pairs;
+
+            for (let i = 0; i < pairs.length; i++) {
+                const pair = pairs[i];
+                const bodyA = pair.bodyA;
+                const bodyB = pair.bodyB;
+
+                let currentBullet = null;
+                let currentWall = null;
+
+                if (bodyA.label === 'bullet' && bodyB.label === 'wall') {
+                    currentBullet = bodyA;
+                    currentWall = bodyB;
+                } else if (bodyB.label === 'bullet' && bodyA.label === 'wall') {
+                    currentBullet = bodyB;
+                    currentWall = bodyA;
+                }
+
+                // Process only bullet-wall collision ONCE per bullet instance
+                if (currentBullet && currentWall && !currentBullet.plugin.bulletData.hasHitWall) {
+                    currentBullet.plugin.bulletData.hasHitWall = true; // Mark as hit
+
+                    const wallThickness = currentWall.plugin.wallData.thicknessMeters;
+                    const bulletMass = currentBullet.mass;
+
+                    // Get bullet velocity AT IMPACT (convert roughly back to m/s for calculation)
+                    // Use the velocity magnitude in the direction of impact (x)
+                    const impactVelocityX = Math.abs(currentBullet.velocity.x) * 5; // Use the same rough factor as setting velocity
+
+                    if (impactVelocityX < 1) { // Avoid calculation if velocity is near zero
+                         console.log("Bullet hit with near zero velocity.");
+                         penetrationResult.textContent = "Status: Bullet stopped (low impact velocity)";
+                         Body.setVelocity(currentBullet, { x: 0, y: 0 }); // Ensure it stops
+                         continue; // Skip further processing for this collision
+                    }
+
+                    // Calculate Kinetic Energy at impact (using estimated m/s)
+                    const kineticEnergy = 0.5 * bulletMass * (impactVelocityX * impactVelocityX);
+
+                    // Calculate Energy required to penetrate
+                    const energyRequired = concreteResistanceFactor * wallThickness;
+
+                    console.log(`Collision: Bullet KE = ${kineticEnergy.toFixed(1)} J`);
+                    console.log(`Wall: Thickness = ${wallThickness.toFixed(3)} m, Energy Required = ${energyRequired.toFixed(1)} J`);
+
+
+                    if (kineticEnergy >= energyRequired) {
+                        // --- Penetration Occurs ---
+                        const energyLoss = energyRequired;
+                        const remainingEnergy = kineticEnergy - energyLoss;
+                        const exitVelocitySquared = (2 * remainingEnergy) / bulletMass;
+                        const exitVelocity = Math.sqrt(Math.max(0, exitVelocitySquared)); // Ensure non-negative
+
+                         // Convert exit velocity (m/s) back to Matter units (approx pixels/tick)
+                        const exitVelocityMatter = exitVelocity / 5; // Use the same factor
+
+                        console.log(`Penetration! Remaining KE = ${remainingEnergy.toFixed(1)} J, Exit Velocity = ${exitVelocity.toFixed(1)} m/s (${exitVelocityMatter.toFixed(1)} px/tick)`);
+                        penetrationResult.textContent = `Status: Penetrated! Exit Velocity: ${exitVelocity.toFixed(1)} m/s`;
+
+                        // Set the bullet's velocity to the exit velocity immediately
+                        // Maintain vertical velocity if any (though should be near 0)
+                        Body.setVelocity(currentBullet, { x: exitVelocityMatter, y: currentBullet.velocity.y });
+
+                         // Optional: Make bullet temporarily ignore wall after passing?
+                         // currentBullet.collisionFilter.mask = 0x0000; // Example: make it ignore everything (use categories for better control)
+                         // This simple model just reduces velocity and lets Matter continue.
+
+                    } else {
+                        // --- No Penetration ---
+                        const penetrationDepth = kineticEnergy / concreteResistanceFactor;
+                        console.log(`No Penetration. Bullet Stopped. Theoretical depth: ${(penetrationDepth * 100).toFixed(1)} cm`);
+                        penetrationResult.textContent = `Status: Bullet Stopped (Insufficient Energy). Would penetrate ${(penetrationDepth * 100).toFixed(1)} cm.`;
+
+                        // Stop the bullet completely
+                        Body.setVelocity(currentBullet, { x: 0, y: 0 });
+
+                        // Optional: Nudge bullet slightly into the wall visually?
+                        // const nudgeDistance = Math.min(penetrationDepth * pixelsPerMeter, currentWall.width / 2);
+                        // Body.setPosition(currentBullet, { x: currentWall.position.x - currentWall.width / 2 + nudgeDistance, y: currentBullet.position.y });
+
+                        // Optional: Make the bullet static so it doesn't jitter
+                        // Body.setStatic(currentBullet, true);
+                    }
+                    break; // Process only the first relevant collision pair
+                }
+            }
+        }
+
+        // --- Event Listeners for Controls ---
+        velocitySlider.addEventListener('input', (e) => {
+            velocityValue.textContent = `${e.target.value} m/s`;
+            // Optionally update simulation live? Reset is safer for consistency.
+        });
+
+        thicknessSlider.addEventListener('input', (e) => {
+            thicknessValue.textContent = `${e.target.value} cm`;
+             // Optionally update simulation live? Reset is safer for consistency.
+        });
+
+        resetButton.addEventListener('click', resetSimulation);
+
+        // --- Start ---
+        document.addEventListener('DOMContentLoaded', setupSimulation);
+
+    </script>
+
+</body>
+</html>

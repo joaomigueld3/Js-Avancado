@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Billiard Game Simulation</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0b4f3e;
+      color: white;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 10px;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls">
+  <h3>Control White Ball</h3>
+  <label>X: <input type="number" id="xPos" step="1" /></label><br/>
+  <label>Y: <input type="number" id="yPos" step="1" /></label><br/>
+  <label>Accel X: <input type="number" id="xForce" step="0.1" /></label><br/>
+  <label>Accel Y: <input type="number" id="yForce" step="0.1" /></label><br/>
+  <button onclick="applyControl()">Apply</button>
+</div>
+
+<canvas id="world"></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+<script>
+  const { Engine, Render, Runner, Bodies, World, Body, Events } = Matter;
+
+  const engine = Engine.create();
+  const world = engine.world;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  const render = Render.create({
+    element: document.body,
+    canvas: document.getElementById('world'),
+    engine: engine,
+    options: {
+      width,
+      height,
+      wireframes: false,
+      background: '#0b4f3e',
+    }
+  });
+
+  Render.run(render);
+  Runner.run(Runner.create(), engine);
+
+  // Table boundaries (walls)
+  const thickness = 40;
+  const walls = [
+    Bodies.rectangle(width / 2, 0, width, thickness, { isStatic: true }), // top
+    Bodies.rectangle(width / 2, height, width, thickness, { isStatic: true }), // bottom
+    Bodies.rectangle(0, height / 2, thickness, height, { isStatic: true }), // left
+    Bodies.rectangle(width, height / 2, thickness, height, { isStatic: true }), // right
+  ];
+  World.add(world, walls);
+
+  function randomPosition() {
+    const margin = 150;
+    return {
+      x: Math.random() * (width - 2 * margin) + margin,
+      y: Math.random() * (height - 2 * margin) + margin
+    };
+  }
+
+  // Ball options
+  const ballRadius = 20;
+  const createBall = (color) => {
+    const { x, y } = randomPosition();
+    return Bodies.circle(x, y, ballRadius, {
+      restitution: 0.95,
+      friction: 0.001,
+      frictionAir: 0.02,
+      render: {
+        fillStyle: color
+      }
+    });
+  };
+
+  const whiteBall = createBall("white");
+  const blackBall = createBall("black");
+  const blueBall = createBall("blue");
+
+  World.add(world, [whiteBall, blackBall, blueBall]);
+
+  // Function to update white ball position and apply acceleration
+  window.applyControl = () => {
+    const x = parseFloat(document.getElementById('xPos').value);
+    const y = parseFloat(document.getElementById('yPos').value);
+    const fx = parseFloat(document.getElementById('xForce').value);
+    const fy = parseFloat(document.getElementById('yForce').value);
+
+    if (!isNaN(x) && !isNaN(y)) {
+      Body.setPosition(whiteBall, { x, y });
+    }
+
+    if (!isNaN(fx) && !isNaN(fy)) {
+      Body.applyForce(whiteBall, whiteBall.position, { x: fx, y: fy });
+    }
+  };
+
+  // Optional: Prevent balls from slowing to zero too quickly
+  Events.on(engine, 'beforeUpdate', () => {
+    [whiteBall, blackBall, blueBall].forEach(ball => {
+      if (ball.speed < 0.05) {
+        Body.setVelocity(ball, { x: 0, y: 0 });
+      }
+    });
+  });
+
+</script>
+</body>
+</html>

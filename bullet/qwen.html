@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matter.js Physics Simulation</title>
+    <style>
+        #canvas {
+            border: 1px solid black;
+        }
+        #controls {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="400"></canvas>
+    <div id="controls">
+        <label for="velocity">Bullet Velocity (m/s):</label>
+        <input type="number" id="velocity" value="500" step="10" min="100">
+        <label for="wallThickness">Wall Thickness (cm):</label>
+        <input type="number" id="wallThickness" value="30" step="1" min="10">
+        <button id="runSimulation">Run Simulation</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+    <script>
+        // Constants
+        const BULLET_RADIUS = 4.5 / 1000; // Convert mm to meters
+        const WALL_HEIGHT = 0.5; // Meters
+        const DISTANCE_BETWEEN_OBJECTS = 10; // Meters
+        const PIXELS_PER_METER = 80; // Scale factor for rendering
+
+        // Material properties
+        const BULLET_MASS = 0.0075; // kg
+        const CONCRETE_DENSITY = 2400; // kg/m³
+        const RESISTIVE_CONSTANT = 1e6; // Empirical constant for concrete
+
+        // Create the engine and renderer
+        const engine = Matter.Engine.create();
+        const render = Matter.Render.create({
+            canvas: document.getElementById('canvas'),
+            engine: engine,
+            options: {
+                width: 800,
+                height: 400,
+                wireframes: false,
+                background: '#f0f0f0'
+            }
+        });
+
+        // Create the bullet and wall
+        let bullet = Matter.Bodies.circle(
+            0, // Start at left edge
+            render.options.height / 2,
+            BULLET_RADIUS * PIXELS_PER_METER,
+            {
+                mass: BULLET_MASS,
+                restitution: 0, // No bounce
+                friction: 0.5
+            }
+        );
+        let wall = Matter.Bodies.rectangle(
+            DISTANCE_BETWEEN_OBJECTS * PIXELS_PER_METER,
+            render.options.height / 2,
+            0.3 * PIXELS_PER_METER, // Initial wall thickness (30 cm)
+            WALL_HEIGHT * PIXELS_PER_METER,
+            {
+                isStatic: true,
+                render: { fillStyle: '#888' }
+            }
+        );
+
+        // Add the bullet and wall to the world
+        Matter.World.add(engine.world, [bullet, wall]);
+
+        // Run the simulation
+        Matter.Engine.run(engine);
+        Matter.Render.run(render);
+
+        // Energy-based penetration model
+        function calculatePenetration(velocity, wallThickness) {
+            const resistiveForce = RESISTIVE_CONSTANT * Math.PI * (BULLET_RADIUS ** 2) * CONCRETE_DENSITY * velocity ** 2;
+            const penetrationDepth = (BULLET_MASS * velocity ** 2) / (2 * resistiveForce);
+            return penetrationDepth >= wallThickness ? "penetrated" : "stopped";
+        }
+
+        // Handle user input
+        document.getElementById('runSimulation').addEventListener('click', () => {
+            // Reset the bullet's position
+            Matter.Body.setPosition(bullet, {
+                x: 0,
+                y: render.options.height / 2
+            });
+
+            // Get user inputs
+            const velocity = parseFloat(document.getElementById('velocity').value);
+            const wallThickness = parseFloat(document.getElementById('wallThickness').value) / 100; // Convert cm to meters
+
+            // Update wall thickness
+            Matter.Body.scale(wall, wallThickness / 0.3, 1); // Scale only width
+
+            // Set bullet velocity
+            Matter.Body.setVelocity(bullet, {
+                x: velocity / PIXELS_PER_METER, // Scale velocity to pixels
+                y: 0
+            });
+
+            // Calculate and display outcome
+            const outcome = calculatePenetration(velocity, wallThickness);
+            console.log(`Outcome: The bullet ${outcome}.`);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+Here is a basic implementation of a 2D billiard ball simulation using Matter.js. This code creates a billiard table with three balls (white, black, and blue) at random initial positions. The player can control the position and acceleration of the white ball using the mouse.
+
+Create a 2D JavaScript physics simulation like a game with 3 billiard balls (white, black, blue), moving in a billiard table. Make the simulation obey the physics principles. The initial position should be random, the variables the player can control are position (x,y) and acceleration. Only one user will play.
+All code for this project should use matter.js, and be contained in a single HTML file using ES modules via import maps.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billiard Ball Simulation</title>
+    <style>
+        #canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <!-- Import map shim for browsers without native support -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+
+    <!-- Define all external dependencies in the import map --> 
+    <script type="importmap"> 
+            { 
+                "imports": { 
+                    "matter": "https://unpkg.com/matter-js@0.14.2/build/matter.js" 
+                } 
+            } 
+    </script>
+    
+    <script type="module">
+        import * as matter from 'matter';
+
+        // Create the canvas and context
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Create the Matter.js engine
+        const engine = Matter.Engine.create();
+
+        // Create the billiard table
+        const table = {
+            width: canvas.width,
+            height: canvas.height,
+            walls: [
+                Matter.Bodies.rectangle(0, canvas.height / 2, 20, canvas.height, { isStatic: true }),
+                Matter.Bodies.rectangle(canvas.width, canvas.height / 2, 20, canvas.height, { isStatic: true }),
+                Matter.Bodies.rectangle(canvas.width / 2, 0, canvas.width, 20, { isStatic: true }),
+                Matter.Bodies.rectangle(canvas.width / 2, canvas.height, canvas.width, 20, { isStatic: true }),
+            ]
+        };
+
+        // Create the balls
+        const balls = [
+            {
+                body: Matter.Bodies.circle(Math.random() * canvas.width, Math.random() * canvas.height, 20, { restitution: 0.9, friction: 0.1 }),
+                color: 'white',
+                controlled: true
+            },
+            {
+                body: Matter.Bodies.circle(Math.random() * canvas.width, Math.random() * canvas.height, 20, { restitution: 0.9, friction: 0.1 }),
+                color: 'black',
+                controlled: false
+            },
+            {
+                body: Matter.Bodies.circle(Math.random() * canvas.width, Math.random() * canvas.height, 20, { restitution: 0.9, friction: 0.1 }),
+                color: 'blue',
+                controlled: false
+            }
+        ];
+
+        // Add the balls and walls to the engine
+        Matter.World.add(engine.world, [...balls.map(ball => ball.body), ...table.walls]);
+
+        // Draw the simulation
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            balls.forEach(ball => {
+                ctx.fillStyle = ball.color;
+                ctx.beginPath();
+                ctx.arc(ball.body.position.x, ball.body.position.y, 20, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, 20, canvas.height);
+            ctx.fillRect(canvas.width - 20, 0, 20, canvas.height);
+            ctx.fillRect(0, 0, canvas.width, 20);
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+        }
+
+        // Update the simulation
+        function update() {
+            Matter.Engine.update(engine, 1000 / 60);
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        // Handle user input
+        function handleInput(event) {
+            if (balls[0].controlled) {
+                const mousePosition = {
+                    x: event.clientX - canvas.offsetLeft,
+                    y: event.clientY - canvas.offsetTop
+                };
+                const vector = {
+                    x: mousePosition.x - balls[0].body.position.x,
+                    y: mousePosition.y - balls[0].body.position.y
+                };
+                const magnitude = Math.sqrt(vector.x ** 2 + vector.y ** 2);
+                const normal = {
+                    x: vector.x / magnitude,
+                    y: vector.y / magnitude
+                };
+                balls[0].body.applyForce(balls[0].body.position, normal);
+            }
+        }
+
+        // Start the simulation
+        update();
+
+        // Add event listener for user input
+        canvas.addEventListener('mousemove', handleInput);
+    </script>
+</body>
+</html>
+```
+
+This code creates a basic billiard ball simulation with three balls (white, black, and blue) at random initial positions. The player can control the position and acceleration of the white ball using the mouse. The simulation uses Matter.js to handle the physics and rendering.
+
+Please note that this is a basic implementation and you may want to add more features such as collision detection, scoring, and smoother animation.
