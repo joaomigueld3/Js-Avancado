@@ -1,0 +1,522 @@
+Here is a basic implementation of a 2D billiards game using Matter.js. This code creates a simulation with 9 balls (1 white, 8 colored) at random initial positions. The player can hit the white ball with the mouse to apply a force in a specific direction.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Billiards Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1a2a3a;
+      color: white;
+      font-family: 'Arial', sans-serif;
+      overflow-x: hidden;
+    }
+
+    canvas {
+      display: block;
+      margin: 20px auto;
+      background: linear-gradient(to bottom, #03810c, #025a08);
+      border: 12px solid #8b4513;
+      border-radius: 6px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+
+    #info {
+      text-align: center;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      margin: 10px auto;
+      max-width: 800px;
+      border-radius: 5px;
+    }
+
+    #positions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin: 10px auto;
+      max-width: 800px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    .ball-position {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    h1 {
+      text-align: center;
+      color: #fff;
+      text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+      margin: 10px 0;
+    }
+
+    .controls {
+      text-align: center;
+      margin: 10px;
+    }
+
+    button {
+      background: #4a6ea9;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      margin: 0 5px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #5d8be6;
+    }
+  </style>
+</head>
+<body>
+<h1>Pool Physics Simulator</h1>
+<div class="controls">
+  <button id="resetBtn">Reset Game</button>
+  <button id="slowMoBtn">Toggle Slow Motion</button>
+</div>
+<canvas id="canvas" width="800" height="600"></canvas>
+<div id="info"></div>
+<div id="positions"></div>
+
+<script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+<script type="importmap">
+  {
+    "imports": {
+      "matter": "https://unpkg.com/matter-js@0.14.2/build/matter.min.js"
+    }
+  }
+</script>
+
+<script type="module">
+  import * as matter from 'matter';
+
+  const { Engine, Bodies, World, Body, Composite } = Matter;
+
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const info = document.getElementById('info');
+  const positionsDiv = document.getElementById('positions');
+  const resetBtn = document.getElementById('resetBtn');
+  const slowMoBtn = document.getElementById('slowMoBtn');
+
+  // Game state
+  let isSlowMotion = false;
+  let gameTime = 0;
+  let lastUpdateTime = 0;
+
+  const engine = Engine.create({
+    enableSleeping: true,
+    gravity: { x: 0, y: 0 },
+    timing: {
+      timeScale: 1.0
+    }
+  });
+  engine.world.gravity.y = 0;
+
+  // Real-world table dimensions (2.5m x 1.2m)
+  const TABLE_WIDTH_M = 2.5;
+  const TABLE_HEIGHT_M = 1.2;
+  
+  // Calculate pixels per meter based on canvas size and table dimensions
+  const PIXELS_PER_METER = Math.min(
+    canvas.width / TABLE_WIDTH_M,
+    canvas.height / TABLE_HEIGHT_M
+  );
+  
+  const BALL_RADIUS = 15;
+  const BALL_RADIUS_M = BALL_RADIUS / PIXELS_PER_METER;
+  const BALL_MASS = 0.15; // 150g
+  const BALL_MARGIN = BALL_RADIUS * 2;
+
+  // Standard pool ball colors (1-8 plus cue ball)
+  const BALL_COLORS = [
+    { fill: 'white', text: 'black' },  // Cue ball
+    { fill: '#FFFF00', text: 'black' }, // 1 Yellow
+    { fill: '#0000FF', text: 'white' },  // 2 Blue
+    { fill: '#FF0000', text: 'white' }, // 3 Red
+    { fill: '#800080', text: 'white' }, // 4 Purple
+    { fill: '#FFA500', text: 'black' },  // 5 Orange
+    { fill: '#008000', text: 'white' },  // 6 Green
+    { fill: '#800000', text: 'white' },  // 7 Maroon
+    { fill: '#000000', text: 'white' },  // 8 Black
+  ];
+
+  // Helper function to create a triangle rack formation
+  function createRackPositions(count, startX, startY, spacing) {
+    const positions = [];
+    let row = 0;
+    let ballsInRow = 1;
+    let ballsPlaced = 0;
+    
+    while (ballsPlaced < count) {
+      for (let i = 0; i < ballsInRow; i++) {
+        if (ballsPlaced >= count) break;
+        
+        const x = startX + (i - (ballsInRow - 1) / 2) * spacing;
+        const y = startY + row * spacing * Math.sin(Math.PI / 3);
+        positions.push({ x, y });
+        ballsPlaced++;
+      }
+      row++;
+      ballsInRow++;
+    }
+    
+    return positions;
+  }
+
+  let balls = [];
+  let ballData = [];
+  let walls = [];
+
+  function initGame() {
+    // Clear existing bodies
+    Composite.clear(engine.world, false);
+    
+    // Create ball data with random positions
+    ballData = [];
+    
+    // First add the cue ball (white) with random position
+    ballData.push({
+        x: getRandomPosition(BALL_RADIUS * 2, canvas.width / 2, BALL_RADIUS * 2),
+        y: getRandomPosition(BALL_RADIUS * 2, canvas.height / 2, BALL_RADIUS * 2),
+        color: BALL_COLORS[0],
+        number: 0
+    });
+    
+    // Add colored balls with random positions (1-8)
+    for (let i = 1; i <= 8; i++) { 
+        let pos;
+        let attempts = 0;
+        const maxAttempts = 100;
+        
+        // Keep trying until we find a non-overlapping position
+        do {
+            pos = {
+                x: getRandomPosition(BALL_RADIUS * 2, canvas.width - BALL_RADIUS * 2, BALL_RADIUS * 2),
+                y: getRandomPosition(BALL_RADIUS * 2, canvas.height - BALL_RADIUS * 2, BALL_RADIUS * 2)
+            };
+            attempts++;
+            
+            // If we can't find a good position after many attempts, just place it
+            if (attempts >= maxAttempts) break;
+        } while (isOverlapping(pos, ballData, BALL_RADIUS * 2.2));
+        
+        ballData.push({
+            x: pos.x,
+            y: pos.y,
+            color: BALL_COLORS[i],
+            number: i
+        });
+    }
+
+    // Helper function to get random position within bounds
+    function getRandomPosition(min, max, padding) {
+        return Math.random() * (max - min - padding * 2) + min + padding;
+    }
+    
+    // Helper function to check for overlapping balls
+    function isOverlapping(newPos, existingBalls, minDistance) {
+        for (const ball of existingBalls) {
+            const dx = newPos.x - ball.x;
+            const dy = newPos.y - ball.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < minDistance) return true;
+        }
+        return false;
+    }
+
+    // Create physics bodies for all balls
+    balls = ballData.map(data =>
+        Bodies.circle(data.x, data.y, BALL_RADIUS, {
+            restitution: 0.95,
+            friction: 0.005,
+            frictionAir: 0.01,
+            mass: BALL_MASS,
+            label: `ball-${data.number}`,
+            collisionFilter: {
+                group: 0,
+                category: 0x0001,
+                mask: 0xFFFFFFFF
+            },
+            render: {
+                fillStyle: data.color.fill,
+                strokeStyle: 'black',
+                lineWidth: 1
+            }
+        })
+    );
+
+    World.add(engine.world, balls);
+
+    // Create walls
+    const wallThickness = 20;
+    walls = [
+        Bodies.rectangle(canvas.width/2, -wallThickness/2, canvas.width, wallThickness, { 
+            isStatic: true,
+            render: { fillStyle: '#8b4513' }
+        }),
+        Bodies.rectangle(canvas.width/2, canvas.height + wallThickness/2, canvas.width, wallThickness, { 
+            isStatic: true,
+            render: { fillStyle: '#8b4513' }
+        }),
+        Bodies.rectangle(-wallThickness/2, canvas.height/2, wallThickness, canvas.height, { 
+            isStatic: true,
+            render: { fillStyle: '#8b4513' }
+        }),
+        Bodies.rectangle(canvas.width + wallThickness/2, canvas.height/2, wallThickness, canvas.height, { 
+            isStatic: true,
+            render: { fillStyle: '#8b4513' }
+        })
+    ];
+    World.add(engine.world, walls);
+
+    // Reset game state
+    gameTime = 0;
+    lastUpdateTime = 0;
+}
+  let isDragging = false;
+  let dragStart = null;
+  let dragEnd = null;
+  let lastForce = { x: 0, y: 0 };
+
+  canvas.addEventListener('mousedown', (e) => {
+    const mousePos = { x: e.offsetX, y: e.offsetY };
+    const whiteBall = balls[0];
+    const distance = Math.sqrt(
+      Math.pow(mousePos.x - whiteBall.position.x, 2) + 
+      Math.pow(mousePos.y - whiteBall.position.y, 2)
+    );
+    
+    if (distance <= BALL_RADIUS) {
+      isDragging = true;
+      dragStart = { x: e.offsetX, y: e.offsetY };
+    }
+  });
+
+  canvas.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      dragEnd = { x: e.offsetX, y: e.offsetY };
+    }
+  });
+
+  canvas.addEventListener('mouseup', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    dragEnd = { x: e.offsetX, y: e.offsetY };
+
+    const dx = dragStart.x - dragEnd.x;
+    const dy = dragStart.y - dragEnd.y;
+    const mag = Math.sqrt(dx * dx + dy * dy);
+
+    if (mag < 5) return;
+
+    // Limit maximum force to prevent too powerful shots
+    const maxForce = 0.01;
+    const scale = 0.0005; // Adjust for realistic feel
+    const forceScale = Math.min(mag * scale, maxForce);
+    
+    // Normalize direction and apply scaled force
+    const fx = (dx / mag) * forceScale;
+    const fy = (dy / mag) * forceScale;
+
+    lastForce = {
+      x: fx * BALL_MASS * PIXELS_PER_METER,
+      y: fy * BALL_MASS * PIXELS_PER_METER
+    };
+
+    Body.applyForce(balls[0], balls[0].position, { x: fx, y: fy });
+  });
+
+  resetBtn.addEventListener('click', initGame);
+  slowMoBtn.addEventListener('click', () => {
+    isSlowMotion = !isSlowMotion;
+    engine.timing.timeScale = isSlowMotion ? 0.3 : 1.0;
+    slowMoBtn.textContent = isSlowMotion ? 'Normal Speed' : 'Slow Motion';
+  });
+
+  function drawTable() {
+    // Wooden table
+    ctx.fillStyle = '#8b4513';
+    ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40);
+    
+    // Felt surface with gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, '#03810c');
+    gradient.addColorStop(1, '#025a08');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Table border
+    ctx.strokeStyle = '#5d3a1a';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(0, 0, canvas.width, canvas.height);
+    
+    // Center spot
+    ctx.beginPath();
+    ctx.arc(canvas.width/2, canvas.height/2, 5, 0, Math.PI*2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    
+    // Head spot (cue ball starting position)
+    ctx.beginPath();
+    ctx.arc(canvas.width/4, canvas.height/2, 5, 0, Math.PI*2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    
+    // Foot spot (rack position)
+    ctx.beginPath();
+    ctx.arc(canvas.width*3/4, canvas.height/2, 5, 0, Math.PI*2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+  }
+
+  function drawBall(b, i) {
+    // Shadow
+    ctx.beginPath();
+    ctx.ellipse(b.position.x, b.position.y + BALL_RADIUS/2, 
+                BALL_RADIUS*0.8, BALL_RADIUS*0.3, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fill();
+    
+    // Ball
+    ctx.beginPath();
+    ctx.arc(b.position.x, b.position.y, BALL_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = ballData[i].color.fill;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Stripe for 9-ball
+    if (ballData[i].color.stripe) {
+      ctx.beginPath();
+      ctx.arc(b.position.x, b.position.y, BALL_RADIUS*0.8, 0, Math.PI * 2);
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = BALL_RADIUS*0.4;
+      ctx.stroke();
+    }
+
+    // Ball number (except for cue ball)
+    if (ballData[i].number > 0) {
+      ctx.fillStyle = ballData[i].color.text;
+      ctx.font = 'bold ' + (BALL_RADIUS*0.8) + 'px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ballData[i].number.toString(), b.position.x, b.position.y);
+    }
+  }
+
+  function updatePositionsDisplay() {
+    positionsDiv.innerHTML = '';
+    
+    balls.forEach((b, i) => {
+      const posElement = document.createElement('div');
+      posElement.className = 'ball-position';
+      posElement.style.backgroundColor = ballData[i].color.fill;
+      posElement.style.color = ballData[i].color.text;
+      
+      const px = (b.position.x / PIXELS_PER_METER).toFixed(2);
+      const py = (b.position.y / PIXELS_PER_METER).toFixed(2);
+      const vx = (b.velocity.x * PIXELS_PER_METER).toFixed(2);
+      const vy = (b.velocity.y * PIXELS_PER_METER).toFixed(2);
+      
+      posElement.innerHTML = `
+        <strong>Ball ${ballData[i].number}</strong><br>
+        Position: (${px}m, ${py}m)<br>
+        Velocity: (${vx}m/s, ${vy}m/s)
+      `;
+      
+      positionsDiv.appendChild(posElement);
+    });
+  }
+
+  function render(timestamp) {
+    if (!lastUpdateTime) lastUpdateTime = timestamp;
+    const deltaTime = timestamp - lastUpdateTime;
+    lastUpdateTime = timestamp;
+    
+    // Ensure timestamp is valid before using
+    if (isNaN(timestamp)) {
+        requestAnimationFrame(render);
+        return;
+    }
+    
+    if (!isSlowMotion) {
+        gameTime += deltaTime;
+    } else {
+        gameTime += deltaTime * 0.3;
+    }
+    
+    Engine.update(engine, deltaTime);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawTable();
+    
+    // Draw balls
+    balls.forEach((b, i) => drawBall(b, i));
+
+    // Draw force vector
+    if (isDragging && dragStart && dragEnd) {
+        ctx.beginPath();
+        ctx.moveTo(balls[0].position.x, balls[0].position.y);
+        ctx.lineTo(dragEnd.x, dragEnd.y);
+        ctx.strokeStyle = 'rgba(255,255,0,0.7)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([4, 2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Draw force magnitude
+        const dx = dragStart.x - dragEnd.x;
+        const dy = dragStart.y - dragEnd.y;
+        const mag = Math.sqrt(dx * dx + dy * dy);
+        const force = Math.min(mag * 0.0005 * BALL_MASS * PIXELS_PER_METER, 0.01 * BALL_MASS * PIXELS_PER_METER);
+        
+        ctx.fillStyle = 'yellow';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${force.toFixed(2)} N`, (balls[0].position.x + dragEnd.x)/2, (balls[0].position.y + dragEnd.y)/2 - 10);
+    }
+
+    // Update info panel - simplified time display
+    const seconds = Math.floor(gameTime / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const formattedTime = `${minutes}:${(seconds % 60).toString().padStart(2, '0')}`;
+    
+    info.innerHTML = `
+      <strong>Game Time:</strong> ${formattedTime} | 
+      <strong>Cue Ball Position:</strong> (${(balls[0].position.x / PIXELS_PER_METER).toFixed(2)}m, ${(balls[0].position.y / PIXELS_PER_METER).toFixed(2)}m) |
+      <strong>Last Force:</strong> (${lastForce.x.toFixed(2)}N, ${lastForce.y.toFixed(2)}N) |
+      <strong>Table:</strong> ${TABLE_WIDTH_M}m × ${TABLE_HEIGHT_M}m
+    `;
+
+    updatePositionsDisplay();
+    requestAnimationFrame(render);
+}
+
+  // Initialize game
+  initGame();
+  render();
+</script>
+</body>
+</html>
+```
+
+This code uses the `matter-js` library to create a simulation with 9 balls (1 white, 8 colored) at random initial positions. The player can hit the white ball with the mouse to apply a force in a specific direction. The simulation is run using the `Matter.Engine.run()` method, and the rendering is done using the `requestAnimationFrame()` method.
+
+Note that this is a basic implementation, and you may want to add additional features such as collision detection, scoring, and sound effects.
